@@ -1,3 +1,5 @@
+## Made by Claude
+
 # Bluetooth Manager — Ultrahand overlay
 
 An overlay for the Nintendo Switch (1st generation) that runs inside **Ultrahand Overlay** and lets you
