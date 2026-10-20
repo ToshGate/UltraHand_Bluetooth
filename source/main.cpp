@@ -18,7 +18,7 @@
 #include "bt_manager.hpp"
 
 #ifndef APP_VERSION
-#define APP_VERSION "1.0.0"
+#define APP_VERSION "1.2.0"
 #endif
 
 // =========================================================================
@@ -680,6 +680,14 @@ public:
 
     void update() override {
         if (m_radioConfirm.expired()) { m_radioConfirm.reset(); m_tick.last = 0; }
+
+        // A couple of seconds after turning off, confirm the system did not turn it back on
+        if (m_verifyAt && nowMs() >= m_verifyAt) {
+            m_verifyAt = 0;
+            bool stillOn = false;
+            if (R_SUCCEEDED(bt::isRadioOn(stillOn)) && stillOn)
+                notify("The system turned Bluetooth back on");
+        }
         if (!bt::isReady() || !m_tick.due(1000)) return;
 
         bool on = false;
@@ -721,12 +729,14 @@ private:
         const Result rc = bt::setRadio(false);
         notify(R_SUCCEEDED(rc) ? "Bluetooth turned off"
                                : "Failed to turn off Bluetooth (" + bt::resultToString(rc) + ")");
+        if (R_SUCCEEDED(rc)) m_verifyAt = nowMs() + 2000;   // check it stayed off
         m_tick.last = 0;
     }
 
     tsl::elm::ListItem* m_radioItem  = nullptr;
     tsl::elm::ListItem* m_pairedItem = nullptr;
     bool    m_radioOn = false;
+    u64     m_verifyAt = 0;
     Confirm m_radioConfirm;
     Ticker  m_tick;
 };
