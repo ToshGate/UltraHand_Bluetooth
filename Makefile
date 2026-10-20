@@ -41,7 +41,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 #---------------------------------------------------------------------------------
 APP_TITLE	:= Bluetooth Manager
 APP_AUTHOR	:= ovl-bluetooth
-APP_VERSION	:= 1.0.0
+APP_VERSION	:= 1.2.0
 TARGET		:= ovl-bluetooth
 BUILD		:= build
 SOURCES		:= source
