@@ -127,6 +127,36 @@ namespace bt {
         return btmsysGetRadioOnOff(&out);
     }
 
+    Result setRadio(bool on) {
+        if (!g_btmsysReady) return g_initRc;
+        // Make sure no pairing / discovery is running when the radio goes down
+        if (!on) {
+            bool active = false;
+            if (R_SUCCEEDED(btmsysIsGamepadPairingStarted(&active)) && active)
+                btmsysCancelGamepadPairing();
+            active = false;
+            if (R_SUCCEEDED(btmsysIsDiscoveryingAudioDevice(&active)) && active)
+                btmsysStopAudioDeviceDiscovery();
+        }
+        return on ? btmsysEnableRadio() : btmsysDisableRadio();
+    }
+
+    bool hasNonBluetoothInput() {
+        static constexpr HidNpadIdType ids[] = {
+            HidNpadIdType_Handheld,
+            HidNpadIdType_No1, HidNpadIdType_No2, HidNpadIdType_No3, HidNpadIdType_No4,
+            HidNpadIdType_No5, HidNpadIdType_No6, HidNpadIdType_No7, HidNpadIdType_No8,
+        };
+        for (HidNpadIdType id : ids) {
+            if (hidGetNpadStyleSet(id) == 0) continue;          // nothing connected here
+            u8 type = 0;
+            if (R_FAILED(hidGetNpadInterfaceType(id, &type))) continue;
+            if (type == HidNpadInterfaceType_Rail || type == HidNpadInterfaceType_USB)
+                return true;
+        }
+        return false;
+    }
+
     Result getPaired(std::vector<Device>& out) {
         out.clear();
         if (!g_btmReady) return g_initRc;
