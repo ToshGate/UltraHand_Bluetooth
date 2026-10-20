@@ -11,16 +11,16 @@ namespace bt {
         bool   g_btmsysReady = false;
         Result g_initRc      = 0;
 
-        // Limites do próprio serviço (switchbrew): os pedidos usam "pointer buffers"
-        // de tamanho fixo e, se o buffer for maior do que o servidor aceita, o btm
-        // fecha a sessão (erro 2001-0123 / KernelError_ConnectionClosed).
+        // Service limits (switchbrew): these requests use fixed-size "pointer buffers";
+        // if the buffer is larger than the server accepts, btm closes the session
+        // (error 2001-0123 / KernelError_ConnectionClosed).
         constexpr size_t MaxDeviceInfo      = 10;  // GetDeviceInfo:      0x13C * 10
         constexpr size_t MaxDeviceCondition = 8;   // GetDeviceCondition: 0x148 * 8
         constexpr size_t MaxAudioDevices    = 8;   // BtmAudioDevice:     0xFF  * 8
 
         const Result ConnectionClosed = MAKERESULT(Module_Kernel, KernelError_ConnectionClosed);
 
-        /// Se o serviço fechou a sessão, volta a abri-la para os pedidos seguintes.
+        /// If the service closed the session, reopen it for subsequent requests.
         Result recover(Result rc) {
             if (rc != ConnectionClosed) return rc;
             if (g_btmReady)    { btmExit();    g_btmReady    = R_SUCCEEDED(btmInitialize()); }
@@ -32,7 +32,7 @@ namespace bt {
             const void* end = std::memchr(raw, '\0', maxLen);
             const size_t len = end ? static_cast<const char*>(end) - raw : maxLen;
             std::string s(raw, len);
-            // Remove espaços no fim
+            // Trim trailing spaces
             while (!s.empty() && (s.back() == ' ' || s.back() == '\0'))
                 s.pop_back();
             return s.empty() ? addrToString(addr) : s;
@@ -47,7 +47,7 @@ namespace bt {
         }
     }
 
-    // ------------------------------------------------------------------ serviços
+    // ------------------------------------------------------------------ services
 
     Result init() {
         if (hosversionBefore(13, 0, 0)) {
@@ -68,7 +68,7 @@ namespace bt {
 
     void exit() {
         if (g_btmsysReady) {
-            // Nunca deixar o modo de emparelhamento / descoberta ativo ao sair
+            // Never leave pairing / discovery mode active on exit
             bool active = false;
             if (R_SUCCEEDED(btmsysIsGamepadPairingStarted(&active)) && active)
                 btmsysCancelGamepadPairing();
@@ -88,7 +88,7 @@ namespace bt {
     bool   isReady()    { return g_btmReady && g_btmsysReady; }
     Result initResult() { return g_initRc; }
 
-    // ------------------------------------------------------------- utilitários
+    // ------------------------------------------------------------- helpers
 
     bool sameAddr(const BtdrvAddress& a, const BtdrvAddress& b) {
         return std::memcmp(a.address, b.address, sizeof(a.address)) == 0;
@@ -111,15 +111,15 @@ namespace bt {
 
     std::string typeToString(DevType t) {
         switch (t) {
-            case DevType::Gamepad: return "Comando";
-            case DevType::Audio:   return "Áudio";
-            default:               return "Outro";
+            case DevType::Gamepad: return "Controller";
+            case DevType::Audio:   return "Audio";
+            default:               return "Other";
         }
     }
 
     bool audioSupported() { return hosversionAtLeast(13, 0, 0); }
 
-    // ------------------------------------------------------------------ estado
+    // ------------------------------------------------------------------ status
 
     Result isRadioOn(bool& out) {
         out = false;
@@ -137,7 +137,7 @@ namespace bt {
         if (R_FAILED(rc)) return recover(rc);
         total = std::clamp<s32>(total, 0, (s32)infos.size());
 
-        // Estado de ligação (dispositivos atualmente ligados)
+        // Connection status (currently connected devices)
         std::vector<BtmConnectedDeviceV13> conds(MaxDeviceCondition);
         s32 connectedTotal = 0;
         if (Result crc = btmGetDeviceCondition(BtmProfile_None, conds.data(), conds.size(), &connectedTotal); R_FAILED(crc)) {
@@ -163,7 +163,7 @@ namespace bt {
             out.push_back(std::move(d));
         }
 
-        // Áudio: a lista de "ligados" do btm:sys é a mais fiável para este perfil
+        // Audio: btm:sys's "connected" list is the most reliable for this profile
         if (g_btmsysReady) {
             std::vector<BtmAudioDevice> audio(MaxAudioDevices);
             s32 audioTotal = 0;
@@ -181,7 +181,7 @@ namespace bt {
         return 0;
     }
 
-    // ----------------------------------------------------- emparelhar comandos
+    // ----------------------------------------------------- controller pairing
 
     Result startGamepadPairing() {
         if (!g_btmsysReady) return g_initRc;
@@ -204,7 +204,7 @@ namespace bt {
         return btmsysClearGamepadPairingDatabase();
     }
 
-    // ------------------------------------------------------------------- áudio
+    // ------------------------------------------------------------------- audio
 
     Result startAudioDiscovery() {
         if (!g_btmsysReady) return g_initRc;
@@ -253,7 +253,7 @@ namespace bt {
         return btmsysIsConnectingAudioDevice(&out);
     }
 
-    // ----------------------------------------------------------------- gestão
+    // ----------------------------------------------------------------- management
 
     Result disconnect(const Device& dev) {
         if (!isReady()) return g_initRc;
@@ -267,10 +267,10 @@ namespace bt {
         if (dev.type == DevType::Audio)
             return btmsysRemoveAudioDevicePairing(dev.addr);
 
-        // Comando: desligar primeiro (se estiver ligado) e depois apagar o registo
+        // Controller: disconnect first (if connected), then delete the record
         if (dev.connected) {
             btmHidDisconnect(dev.addr);
-            svcSleepThread(300'000'000ULL); // 300 ms para o btm processar
+            svcSleepThread(300'000'000ULL); // 300 ms for btm to process
         }
         return btmRemoveDeviceInfo(dev.addr);
     }

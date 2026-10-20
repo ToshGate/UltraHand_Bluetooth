@@ -1,91 +1,97 @@
-# Bluetooth Manager — overlay para Ultrahand
+# Bluetooth Manager — Ultrahand overlay
 
-Overlay para a Nintendo Switch (1ª geração) que corre no **Ultrahand Overlay** e permite
-emparelhar e gerir dispositivos Bluetooth sem sair do jogo.
+An overlay for the Nintendo Switch (1st generation) that runs inside **Ultrahand Overlay** and lets you
+pair and manage Bluetooth devices without leaving your game.
 
-## Funcionalidades
+## Features
 
-| Ecrã | O que faz |
+| Screen | What it does |
 |---|---|
-| **Menu principal** | Estado do rádio Bluetooth e número de dispositivos emparelhados / ligados |
-| **Emparelhar → Comando** | Ativa o modo de emparelhamento (SYNC). Mostra em tempo real os comandos novos que forem emparelhados |
-| **Emparelhar → Auscultadores / colunas** | Procura dispositivos de áudio, lista-os à medida que aparecem e liga/emparelha com **A** |
-| **Gerir → Dispositivos emparelhados** | Lista comandos e dispositivos de áudio, com estado *Ligado* atualizado a cada segundo |
-| **Detalhe do dispositivo** | Tipo, endereço, VID:PID, estado · **Ligar** (áudio) · **Desligar** · **Esquecer** (confirmação em dois toques) |
-| **Esquecer todos os comandos** | Limpa a base de dados de comandos (confirmação em dois toques) |
+| **Main menu** | Bluetooth radio status and the number of paired / connected devices |
+| **Pair → Controller** | Enables pairing mode (SYNC). Newly paired controllers show up in real time |
+| **Pair → Headphones / speakers** | Searches for audio devices, lists them as they appear, and pairs/connects with **A** |
+| **Manage → Paired devices** | Lists controllers and audio devices, with *Connected* status refreshed every second |
+| **Device details** | Type, address, VID:PID, status · **Connect** (audio) · **Disconnect** · **Forget** (two-press confirmation) |
+| **Forget all controllers** | Clears the controller pairing database (two-press confirmation) |
 
-Ao sair de um ecrã, o modo de emparelhamento / pesquisa é sempre cancelado.
+Leaving a screen always cancels pairing mode / device search.
 
-## Requisitos
+## Requirements
 
-- Atmosphère + **Ultrahand Overlay** instalado (HOS 16.0.0+ exigido pelo Ultrahand)
-- Firmware **13.0.0+** (APIs de áudio Bluetooth e `GetDeviceInfo` usadas pelo overlay)
+- Atmosphère + **Ultrahand Overlay** (Ultrahand itself requires HOS 16.0.0+)
+- Firmware **13.0.0+** (needed for the Bluetooth audio APIs and `GetDeviceInfo` used by this overlay)
 
-## Limitações do sistema (não do overlay)
+## System limitations (not overlay limitations)
 
-- A Switch só suporta nativamente **comandos** (Joy-Con, Pro Controller, comandos licenciados)
-  e **áudio** (auscultadores/colunas). Teclados, ratos ou telemóveis não são suportados pelo firmware.
-- Comandos de outras marcas (PS4/PS5/Xbox…) só emparelham com o sysmodule
-  [MissionControl](https://github.com/ndeadly/MissionControl) instalado; depois aparecem aqui normalmente.
-- Com áudio Bluetooth ligado, só é possível usar 2 comandos sem fios e o jogo local sem fios fica indisponível.
-- Microfones Bluetooth não são suportados.
+- The Switch natively supports only **controllers** (Joy-Con, Pro Controller, licensed controllers)
+  and **audio** (headphones/speakers). Keyboards, mice and phones are not supported by the firmware.
+- Third-party controllers (PS4/PS5/Xbox…) only pair with the
+  [MissionControl](https://github.com/ndeadly/MissionControl) sysmodule installed; after that they show up here normally.
+- While Bluetooth audio is connected, only 2 wireless controllers can be used and local wireless play is unavailable.
+- Bluetooth microphones are not supported.
 
-## Compilar
+## Building
 
-### Opção A — GitHub Actions (sem instalar nada)
-1. Cria um repositório no GitHub e envia esta pasta.
-2. O workflow `.github/workflows/build.yml` compila automaticamente com a imagem oficial do devkitPro.
-3. Descarrega o artefacto **ovl-bluetooth** no separador *Actions*.
+### Option A — GitHub Actions (nothing to install)
+1. Create a GitHub repository and upload this folder (including the hidden `.github` folder).
+2. The `.github/workflows/build.yml` workflow builds the overlay automatically using the official
+   `devkitpro/devkita64` Docker image.
+3. Open the **Actions** tab, pick the latest successful run and download the **ovl-bluetooth** artifact.
 
-### Opção B — Localmente
-1. Instala o [devkitPro](https://devkitpro.org/wiki/Getting_Started) com `switch-dev`.
-2. Instala as dependências do libultrahand:
+### Option B — Locally
+1. Install [devkitPro](https://devkitpro.org/wiki/Getting_Started) with `switch-dev`.
+2. Install libultrahand's dependencies:
    ```sh
-   (dkp-)pacman -S switch-curl switch-zlib switch-minizip switch-mbedtls
+   (dkp-)pacman -S switch-curl switch-zlib switch-mbedtls
    ```
-3. Na raiz do projeto:
+   (`switch-minizip` is optional; it is only linked if present.)
+3. From the project root:
    ```sh
    make
    ```
-O resultado fica em `out/switch/.overlays/ovl-bluetooth.ovl`.
+The output is `ovl-bluetooth.ovl` (also copied to `out/switch/.overlays/`).
 
-> O `libultrahand` está incluído em `lib/libultrahand`. Para o atualizar, substitui essa pasta pela
-> versão mais recente de https://github.com/ppkantorski/libultrahand.
+> `libultrahand` is bundled in `lib/libultrahand`. To update it, replace that folder with the latest
+> version from https://github.com/ppkantorski/libultrahand.
 
-## Instalar
+## Installing
 
-Copia `ovl-bluetooth.ovl` para `sd:/switch/.overlays/` e abre o Ultrahand (por defeito **ZL + ZR + ↓**).
-O overlay aparece como **Bluetooth Manager**.
+Copy `ovl-bluetooth.ovl` to `sd:/switch/.overlays/` and open Ultrahand (default **ZL + ZR + ↓**).
+The overlay is listed as **Bluetooth Manager**.
 
-## Estrutura
+## Project layout
 
 ```
 source/
-  main.cpp          Ecrãs (MainGui, PairGamepadGui, PairAudioGui, DevicesGui, DeviceGui)
-  bt_manager.hpp    API da camada Bluetooth
-  bt_manager.cpp    Implementação sobre btm / btm:sys da libnx
-lib/libultrahand/   Biblioteca de UI (fork do libtesla)
+  main.cpp          Screens (MainGui, PairGamepadGui, PairAudioGui, DevicesGui, DeviceGui)
+  bt_manager.hpp    Bluetooth layer API
+  bt_manager.cpp    Implementation on top of libnx's btm / btm:sys
+lib/libultrahand/   UI library (libtesla fork)
 ```
 
-### Serviços usados
+### Services used
 
-| Ação | Função libnx |
+| Action | libnx function |
 |---|---|
-| Listar emparelhados | `btmGetDeviceInfo` + `btmGetDeviceCondition` + `btmsysGetConnectedAudioDevices` |
-| Emparelhar comando | `btmsysStartGamepadPairing` / `btmsysCancelGamepadPairing` |
-| Procurar áudio | `btmsysStartAudioDeviceDiscovery` / `btmsysGetDiscoveredAudioDevice` |
-| Ligar áudio | `btmsysConnectAudioDevice` |
-| Desligar | `btmsysDisconnectAudioDevice` (áudio) · `btmHidDisconnect` (comando) |
-| Esquecer | `btmsysRemoveAudioDevicePairing` (áudio) · `btmRemoveDeviceInfo` (comando) |
-| Esquecer todos os comandos | `btmsysClearGamepadPairingDatabase` |
+| List paired devices | `btmGetDeviceInfo` + `btmGetDeviceCondition` + `btmsysGetConnectedAudioDevices` |
+| Pair controller | `btmsysStartGamepadPairing` / `btmsysCancelGamepadPairing` |
+| Search for audio | `btmsysStartAudioDeviceDiscovery` / `btmsysGetDiscoveredAudioDevice` |
+| Connect audio | `btmsysConnectAudioDevice` |
+| Disconnect | `btmsysDisconnectAudioDevice` (audio) · `btmHidDisconnect` (controller) |
+| Forget | `btmsysRemoveAudioDevicePairing` (audio) · `btmRemoveDeviceInfo` (controller) |
+| Forget all controllers | `btmsysClearGamepadPairingDatabase` |
 
-Os erros são mostrados no formato `2XXX-YYYY`, igual ao do sistema.
+These requests use fixed-size IPC pointer buffers, so the overlay never asks for more entries than the
+service allows (10 device infos, 8 device conditions, 8 audio devices). Exceeding those limits makes
+`btm` close the session (`2001-0123`); if that ever happens, the overlay reopens the session automatically.
 
-## Personalização
+Errors are shown in the system's `2XXX-YYYY` format.
 
-- Tema / papel de parede próprios: `sd:/config/ovl-bluetooth/theme.ini` e `wallpaper.rgba`
-- Traduções: `sd:/config/ovl-bluetooth/lang/<código>.json`
+## Customisation
 
-## Licença
+- Custom theme / wallpaper: `sd:/config/ovl-bluetooth/theme.ini` and `wallpaper.rgba`
+- Translations: `sd:/config/ovl-bluetooth/lang/<code>.json` (keys are the English UI strings)
 
-GPLv2 (por usar o libultrahand).
+## License
+
+GPLv2 (because it uses libultrahand).

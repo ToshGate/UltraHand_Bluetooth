@@ -1,9 +1,9 @@
 /*
- * Bluetooth Manager — overlay para Ultrahand (libultrahand) na Nintendo Switch.
+ * Bluetooth Manager — Ultrahand (libultrahand) overlay for the Nintendo Switch.
  *
- *  - Emparelhar novos comandos (modo SYNC)
- *  - Procurar e emparelhar auscultadores / colunas Bluetooth (13.0.0+)
- *  - Ver dispositivos emparelhados, estado de ligação, desligar e esquecer
+ *  - Pair new controllers (SYNC mode)
+ *  - Search for and pair Bluetooth headphones / speakers (13.0.0+)
+ *  - View paired devices and their connection status, disconnect and forget
  */
 #define TESLA_INIT_IMPL
 #if USE_EXCEPTION_WRAP
@@ -22,7 +22,7 @@
 #endif
 
 // =========================================================================
-// Utilitários de UI
+// UI helpers
 // =========================================================================
 namespace {
 
@@ -30,7 +30,7 @@ namespace {
         return armTicksToNs(armGetSystemTick()) / 1'000'000ULL;
     }
 
-    /// Limita a frequência de chamadas ao serviço Bluetooth dentro de update()
+    /// Throttles Bluetooth service calls made from update()
     struct Ticker {
         u64 last = 0;
         bool due(u64 intervalMs) {
@@ -40,7 +40,7 @@ namespace {
         }
     };
 
-    /// Confirmação em dois toques (A para armar, A outra vez para executar)
+    /// Two-press confirmation (A to arm, A again to execute)
     struct Confirm {
         bool armed = false;
         u64  at    = 0;
@@ -60,7 +60,7 @@ namespace {
 
     std::string addrKey(const BtdrvAddress& a) { return bt::addrToString(a); }
 
-    /// Texto descritivo (cinzento) por baixo dos itens. Usar '\n' para quebrar linhas.
+    /// Grey description text below items. Use '\n' for line breaks.
     void addDescription(tsl::elm::List* list, const std::string& text) {
         size_t lines = 1;
         for (char c : text) if (c == '\n') lines++;
@@ -72,15 +72,15 @@ namespace {
             }), height);
     }
 
-    /// Ecrã usado quando o serviço Bluetooth não pôde ser aberto
+    /// Screen shown when the Bluetooth service could not be opened
     tsl::elm::Element* makeErrorFrame(const std::string& title) {
         auto* frame = new tsl::elm::OverlayFrame(title, "Bluetooth Manager v" APP_VERSION);
         auto* list  = new tsl::elm::List();
-        list->addItem(new tsl::elm::CategoryHeader("Erro"));
-        list->addItem(new tsl::elm::ListItem("Serviço Bluetooth", bt::resultToString(bt::initResult())));
+        list->addItem(new tsl::elm::CategoryHeader("Error"));
+        list->addItem(new tsl::elm::ListItem("Bluetooth service", bt::resultToString(bt::initResult())));
         addDescription(list, hosversionBefore(13, 0, 0)
-            ? "Este overlay requer o firmware 13.0.0 ou superior."
-            : "Não foi possível abrir os serviços btm / btm:sys.\nReinicia a consola e tenta novamente.");
+            ? "This overlay requires firmware 13.0.0 or later."
+            : "Could not open the btm / btm:sys services.\nRestart the console and try again.");
         frame->setContent(list);
         return frame;
     }
@@ -95,12 +95,12 @@ namespace {
         return true;
     }
 
-    const char* connectedLabel(bool connected) { return connected ? "Ligado" : "Desligado"; }
+    const char* connectedLabel(bool connected) { return connected ? "Connected" : "Disconnected"; }
 
 } // namespace
 
 // =========================================================================
-// Detalhe de um dispositivo emparelhado
+// Paired device details
 // =========================================================================
 class DeviceGui : public tsl::Gui {
 public:
@@ -110,66 +110,66 @@ public:
         auto* frame = new tsl::elm::OverlayFrame(m_dev.name, bt::typeToString(m_dev.type));
         auto* list  = new tsl::elm::List();
 
-        list->addItem(new tsl::elm::CategoryHeader("Informação"));
-        list->addItem(new tsl::elm::ListItem("Tipo", bt::typeToString(m_dev.type)));
-        list->addItem(new tsl::elm::ListItem("Endereço", bt::addrToString(m_dev.addr)));
+        list->addItem(new tsl::elm::CategoryHeader("Information"));
+        list->addItem(new tsl::elm::ListItem("Type", bt::typeToString(m_dev.type)));
+        list->addItem(new tsl::elm::ListItem("Address", bt::addrToString(m_dev.addr)));
         if (m_dev.type == bt::DevType::Gamepad && (m_dev.vid || m_dev.pid)) {
             char buf[16];
             std::snprintf(buf, sizeof(buf), "%04X:%04X", m_dev.vid, m_dev.pid);
             list->addItem(new tsl::elm::ListItem("VID:PID", buf));
         }
-        m_stateItem = new tsl::elm::ListItem("Estado", connectedLabel(m_dev.connected));
+        m_stateItem = new tsl::elm::ListItem("Status", connectedLabel(m_dev.connected));
         list->addItem(m_stateItem);
 
-        list->addItem(new tsl::elm::CategoryHeader("Ações"));
+        list->addItem(new tsl::elm::CategoryHeader("Actions"));
 
         if (m_dev.type == bt::DevType::Audio) {
-            auto* connectItem = new tsl::elm::ListItem("Ligar");
+            auto* connectItem = new tsl::elm::ListItem("Connect");
             connectItem->setClickListener([this](u64 keys) {
                 if (!(keys & KEY_A)) return false;
-                if (m_dev.connected) { notify("Já está ligado"); return true; }
+                if (m_dev.connected) { notify("Already connected"); return true; }
                 const Result rc = bt::connectAudio(m_dev.addr);
-                notify(R_SUCCEEDED(rc) ? "A ligar a " + m_dev.name + "…"
-                                       : "Falha ao ligar (" + bt::resultToString(rc) + ")");
+                notify(R_SUCCEEDED(rc) ? "Connecting to " + m_dev.name + "…"
+                                       : "Failed to connect (" + bt::resultToString(rc) + ")");
                 return true;
             });
             list->addItem(connectItem);
         }
 
-        auto* disconnectItem = new tsl::elm::ListItem("Desligar");
+        auto* disconnectItem = new tsl::elm::ListItem("Disconnect");
         disconnectItem->setClickListener([this](u64 keys) {
             if (!(keys & KEY_A)) return false;
-            if (!m_dev.connected) { notify("O dispositivo não está ligado"); return true; }
+            if (!m_dev.connected) { notify("Device is not connected"); return true; }
             const Result rc = bt::disconnect(m_dev);
-            notify(R_SUCCEEDED(rc) ? m_dev.name + " desligado"
-                                   : "Falha ao desligar (" + bt::resultToString(rc) + ")");
+            notify(R_SUCCEEDED(rc) ? m_dev.name + " disconnected"
+                                   : "Failed to disconnect (" + bt::resultToString(rc) + ")");
             return true;
         });
         list->addItem(disconnectItem);
 
-        m_forgetItem = new tsl::elm::ListItem("Esquecer dispositivo");
+        m_forgetItem = new tsl::elm::ListItem("Forget device");
         m_forgetItem->setClickListener([this](u64 keys) {
             if (!(keys & KEY_A)) return false;
             if (!m_confirm.press()) {
-                m_forgetItem->setValue("Prime  para confirmar");
+                m_forgetItem->setValue("Press  to confirm");
                 return true;
             }
             m_forgetItem->setValue("");
             const Result rc = bt::forget(m_dev);
             if (R_SUCCEEDED(rc)) {
-                notify(m_dev.name + " foi esquecido");
+                notify(m_dev.name + " forgotten");
                 m_gone = true;
                 tsl::goBack();
             } else {
-                notify("Falha ao esquecer (" + bt::resultToString(rc) + ")");
+                notify("Failed to forget (" + bt::resultToString(rc) + ")");
             }
             return true;
         });
         list->addItem(m_forgetItem);
 
         addDescription(list, m_dev.type == bt::DevType::Gamepad
-            ? "Os Joy-Con voltam a emparelhar sozinhos\nquando encaixados na consola."
-            : "Para voltar a usar um dispositivo esquecido,\nemparelha-o de novo em \"Áudio\".");
+            ? "Joy-Con re-pair automatically when\nattached to the console."
+            : "To use a forgotten device again, pair it\nagain from \"Headphones / speakers\".");
 
         frame->setContent(list);
         return frame;
@@ -190,7 +190,7 @@ public:
                 return;
             }
         }
-        // Deixou de estar emparelhado (removido noutro sítio)
+        // No longer paired (removed elsewhere)
         m_gone = true;
         tsl::goBack();
     }
@@ -205,50 +205,50 @@ private:
 };
 
 // =========================================================================
-// Lista de dispositivos emparelhados
+// Paired device list
 // =========================================================================
 class DevicesGui : public tsl::Gui {
 public:
     DevicesGui() { m_rc = bt::getPaired(m_devs); }
 
     tsl::elm::Element* createUI() override {
-        if (!bt::isReady()) return makeErrorFrame("Dispositivos");
+        if (!bt::isReady()) return makeErrorFrame("Devices");
 
-        auto* frame = new tsl::elm::OverlayFrame("Dispositivos", "Emparelhados nesta consola");
+        auto* frame = new tsl::elm::OverlayFrame("Devices", "Paired with this console");
         auto* list  = new tsl::elm::List();
 
         if (R_FAILED(m_rc)) {
-            list->addItem(new tsl::elm::CategoryHeader("Erro"));
-            list->addItem(new tsl::elm::ListItem("Ler dispositivos", bt::resultToString(m_rc)));
+            list->addItem(new tsl::elm::CategoryHeader("Error"));
+            list->addItem(new tsl::elm::ListItem("Read devices", bt::resultToString(m_rc)));
             frame->setContent(list);
             return frame;
         }
 
-        addSection(list, "Comandos", bt::DevType::Gamepad, "Nenhum comando emparelhado");
-        addSection(list, "Áudio",    bt::DevType::Audio,   "Nenhum dispositivo de áudio");
+        addSection(list, "Controllers", bt::DevType::Gamepad, "No controllers paired");
+        addSection(list, "Audio",       bt::DevType::Audio,   "No audio devices paired");
 
-        // Dispositivos de outros perfis (raro)
+        // Devices with other profiles (rare)
         bool hasOther = false;
         for (auto& d : m_devs) if (d.type == bt::DevType::Other) { hasOther = true; break; }
-        if (hasOther) addSection(list, "Outros", bt::DevType::Other, "");
+        if (hasOther) addSection(list, "Other", bt::DevType::Other, "");
 
-        list->addItem(new tsl::elm::CategoryHeader("Ações"));
-        m_clearItem = new tsl::elm::ListItem("Esquecer todos os comandos");
+        list->addItem(new tsl::elm::CategoryHeader("Actions"));
+        m_clearItem = new tsl::elm::ListItem("Forget all controllers");
         m_clearItem->setClickListener([this](u64 keys) {
             if (!(keys & KEY_A)) return false;
             if (!m_confirm.press()) {
-                m_clearItem->setValue("Prime  para confirmar");
+                m_clearItem->setValue("Press  to confirm");
                 return true;
             }
             m_clearItem->setValue("");
             const Result rc = bt::clearGamepadDatabase();
-            notify(R_SUCCEEDED(rc) ? "Todos os comandos foram esquecidos"
-                                   : "Falha (" + bt::resultToString(rc) + ")");
+            notify(R_SUCCEEDED(rc) ? "All controllers forgotten"
+                                   : "Failed (" + bt::resultToString(rc) + ")");
             if (R_SUCCEEDED(rc)) tsl::swapTo<DevicesGui>();
             return true;
         });
         list->addItem(m_clearItem);
-        addDescription(list, "Remove todos os comandos sem fios. Os Joy-Con\nvoltam a emparelhar quando encaixados.");
+        addDescription(list, "Removes all wireless controllers. Joy-Con\nre-pair when attached to the console.");
 
         frame->setContent(list);
         return frame;
@@ -261,19 +261,19 @@ public:
         std::vector<bt::Device> now;
         if (R_FAILED(bt::getPaired(now))) return;
 
-        // A lista mudou (novo dispositivo, dispositivo esquecido): reconstruir o ecrã
+        // The list changed (new or forgotten device): rebuild the screen
         if (!sameAddressSet(now, m_devs)) {
             tsl::swapTo<DevicesGui>();
             return;
         }
-        // Só o estado de ligação mudou: atualizar os valores no sítio
+        // Only the connection status changed: update values in place
         for (const auto& d : now) {
             auto it = m_items.find(addrKey(d.addr));
             if (it == m_items.end()) continue;
             for (auto& old : m_devs) {
                 if (bt::sameAddr(old.addr, d.addr) && old.connected != d.connected) {
                     old.connected = d.connected;
-                    it->second->setValue(d.connected ? "Ligado" : "");
+                    it->second->setValue(d.connected ? "Connected" : "");
                 }
             }
         }
@@ -291,7 +291,7 @@ private:
         }
         for (const auto& d : m_devs) {
             if (d.type != type) continue;
-            auto* item = new tsl::elm::ListItem(d.name, d.connected ? "Ligado" : "");
+            auto* item = new tsl::elm::ListItem(d.name, d.connected ? "Connected" : "");
             const bt::Device copy = d;
             item->setClickListener([copy](u64 keys) {
                 if (!(keys & KEY_A)) return false;
@@ -312,7 +312,7 @@ private:
 };
 
 // =========================================================================
-// Emparelhar comando (modo SYNC)
+// Pair controller (SYNC mode)
 // =========================================================================
 class PairGamepadGui : public tsl::Gui {
 public:
@@ -330,43 +330,43 @@ public:
     }
 
     tsl::elm::Element* createUI() override {
-        if (!bt::isReady()) return makeErrorFrame("Emparelhar comando");
+        if (!bt::isReady()) return makeErrorFrame("Pair controller");
 
-        auto* frame = new tsl::elm::OverlayFrame("Emparelhar comando", "Modo de emparelhamento");
+        auto* frame = new tsl::elm::OverlayFrame("Pair controller", "Pairing mode");
         m_list = new tsl::elm::List();
 
-        m_list->addItem(new tsl::elm::CategoryHeader("Estado"));
-        m_statusItem = new tsl::elm::ListItem("Emparelhamento",
-            R_SUCCEEDED(m_rc) ? "Ativo" : "Erro " + bt::resultToString(m_rc));
+        m_list->addItem(new tsl::elm::CategoryHeader("Status"));
+        m_statusItem = new tsl::elm::ListItem("Pairing",
+            R_SUCCEEDED(m_rc) ? "Active" : "Error " + bt::resultToString(m_rc));
         m_list->addItem(m_statusItem);
 
         addDescription(m_list,
-            "Mantém premido o botão SYNC do comando.\n"
-            "Joy-Con: botão entre SL e SR.\n"
-            "Pro Controller: junto à porta USB-C.");
+            "Hold the SYNC button on the controller.\n"
+            "Joy-Con: button between SL and SR.\n"
+            "Pro Controller: next to the USB-C port.");
 
-        auto* restart = new tsl::elm::ListItem("Reiniciar emparelhamento");
+        auto* restart = new tsl::elm::ListItem("Restart pairing");
         restart->setClickListener([this](u64 keys) {
             if (!(keys & KEY_A)) return false;
             bt::cancelGamepadPairing();
             m_rc = bt::startGamepadPairing();
-            m_statusItem->setValue(R_SUCCEEDED(m_rc) ? "Ativo" : "Erro " + bt::resultToString(m_rc));
+            m_statusItem->setValue(R_SUCCEEDED(m_rc) ? "Active" : "Error " + bt::resultToString(m_rc));
             return true;
         });
         m_list->addItem(restart);
 
-        auto* stop = new tsl::elm::ListItem("Parar emparelhamento");
+        auto* stop = new tsl::elm::ListItem("Stop pairing");
         stop->setClickListener([this](u64 keys) {
             if (!(keys & KEY_A)) return false;
             bt::cancelGamepadPairing();
-            m_statusItem->setValue("Parado");
+            m_statusItem->setValue("Stopped");
             return true;
         });
         m_list->addItem(stop);
 
         addDescription(m_list,
-            "Outros comandos (PS4/PS5/Xbox…) requerem o\n"
-            "sysmodule MissionControl instalado.");
+            "Other controllers (PS4/PS5/Xbox…) require\n"
+            "the MissionControl sysmodule.");
 
         frame->setContent(m_list);
         return frame;
@@ -377,7 +377,7 @@ public:
 
         bool active = false;
         if (R_SUCCEEDED(bt::isGamepadPairing(active)))
-            m_statusItem->setValue(active ? "Ativo" : "Terminado");
+            m_statusItem->setValue(active ? "Active" : "Finished");
 
         std::vector<bt::Device> devs;
         if (R_FAILED(bt::getPaired(devs))) return;
@@ -386,11 +386,11 @@ public:
             m_known.push_back(d.addr);
 
             if (!m_newHeader) {
-                m_list->addItem(new tsl::elm::CategoryHeader("Novos comandos"));
+                m_list->addItem(new tsl::elm::CategoryHeader("New controllers"));
                 m_newHeader = true;
             }
-            m_list->addItem(new tsl::elm::ListItem(d.name, "Emparelhado"));
-            notify(d.name + " emparelhado");
+            m_list->addItem(new tsl::elm::ListItem(d.name, "Paired"));
+            notify(d.name + " paired");
         }
     }
 
@@ -409,7 +409,7 @@ private:
 };
 
 // =========================================================================
-// Emparelhar dispositivo de áudio (13.0.0+)
+// Pair audio device (13.0.0+)
 // =========================================================================
 class PairAudioGui : public tsl::Gui {
 public:
@@ -427,33 +427,33 @@ public:
     }
 
     tsl::elm::Element* createUI() override {
-        if (!bt::isReady()) return makeErrorFrame("Emparelhar áudio");
+        if (!bt::isReady()) return makeErrorFrame("Pair audio");
 
-        auto* frame = new tsl::elm::OverlayFrame("Emparelhar áudio", "Auscultadores e colunas");
+        auto* frame = new tsl::elm::OverlayFrame("Pair audio", "Headphones and speakers");
         m_list = new tsl::elm::List();
 
-        m_list->addItem(new tsl::elm::CategoryHeader("Estado"));
-        m_statusItem = new tsl::elm::ListItem("Pesquisa",
-            R_SUCCEEDED(m_rc) ? "A procurar…" : "Erro " + bt::resultToString(m_rc));
+        m_list->addItem(new tsl::elm::CategoryHeader("Status"));
+        m_statusItem = new tsl::elm::ListItem("Search",
+            R_SUCCEEDED(m_rc) ? "Searching…" : "Error " + bt::resultToString(m_rc));
         m_list->addItem(m_statusItem);
 
-        auto* rescan = new tsl::elm::ListItem("Procurar novamente");
+        auto* rescan = new tsl::elm::ListItem("Search again");
         rescan->setClickListener([this](u64 keys) {
             if (!(keys & KEY_A)) return false;
-            if (m_connecting) { notify("Aguarda o fim da ligação"); return true; }
+            if (m_connecting) { notify("Wait for the connection to finish"); return true; }
             bt::stopAudioDiscovery();
             m_rc = bt::startAudioDiscovery();
-            m_statusItem->setValue(R_SUCCEEDED(m_rc) ? "A procurar…" : "Erro " + bt::resultToString(m_rc));
+            m_statusItem->setValue(R_SUCCEEDED(m_rc) ? "Searching…" : "Error " + bt::resultToString(m_rc));
             return true;
         });
         m_list->addItem(rescan);
 
         addDescription(m_list,
-            "Coloca o dispositivo em modo de emparelhamento.\n"
-            "Com áudio ligado só podes usar 2 comandos\n"
-            "sem fios e o modo local fica indisponível.");
+            "Put the device in pairing mode.\n"
+            "While audio is connected, only 2 wireless\n"
+            "controllers work and local play is unavailable.");
 
-        m_list->addItem(new tsl::elm::CategoryHeader("Dispositivos encontrados"));
+        m_list->addItem(new tsl::elm::CategoryHeader("Devices found"));
 
         frame->setContent(m_list);
         return frame;
@@ -466,7 +466,7 @@ public:
 
         bool discovering = false;
         if (R_SUCCEEDED(bt::isDiscoveringAudio(discovering)) && R_SUCCEEDED(m_rc))
-            m_statusItem->setValue(discovering ? "A procurar…" : "Pesquisa terminada");
+            m_statusItem->setValue(discovering ? "Searching…" : "Search finished");
 
         std::vector<bt::Device> found;
         if (R_FAILED(bt::getDiscoveredAudio(found))) return;
@@ -474,7 +474,7 @@ public:
             const std::string key = addrKey(d.addr);
             if (m_items.count(key)) continue;
 
-            auto* item = new tsl::elm::ListItem(d.name, isPaired(d.addr) ? "Emparelhado" : "");
+            auto* item = new tsl::elm::ListItem(d.name, isPaired(d.addr) ? "Paired" : "");
             const bt::Device copy = d;
             item->setClickListener([this, copy](u64 keys) {
                 if (!(keys & KEY_A)) return false;
@@ -488,28 +488,28 @@ public:
 
 private:
     void beginConnect(const bt::Device& dev) {
-        if (m_connecting) { notify("Já existe uma ligação em curso"); return; }
+        if (m_connecting) { notify("A connection is already in progress"); return; }
 
         bt::stopAudioDiscovery();
         const Result rc = bt::connectAudio(dev.addr);
         if (R_FAILED(rc)) {
-            notify("Falha ao ligar (" + bt::resultToString(rc) + ")");
+            notify("Failed to connect (" + bt::resultToString(rc) + ")");
             return;
         }
         m_connecting   = true;
         m_target       = dev;
         m_connectStart = nowMs();
-        m_statusItem->setValue("A ligar…");
+        m_statusItem->setValue("Connecting…");
         if (auto it = m_items.find(addrKey(dev.addr)); it != m_items.end())
-            it->second->setValue("A ligar…");
+            it->second->setValue("Connecting…");
     }
 
     void pollConnection() {
         bool busy = false;
         bt::isConnectingAudio(busy);
         const u64 elapsed = nowMs() - m_connectStart;
-        // Dar ao btm algum tempo para marcar a ligação como "em curso";
-        // ao fim de 30 s desistimos de esperar (limite de segurança)
+        // Give btm some time to flag the connection as "in progress";
+        // after 30 s we stop waiting (safety limit)
         if (elapsed < 1500 || (busy && elapsed < 30000)) return;
 
         m_connecting = false;
@@ -523,13 +523,13 @@ private:
         auto it = m_items.find(addrKey(m_target.addr));
         if (ok) {
             m_paired.push_back(m_target.addr);
-            notify(m_target.name + " ligado");
-            m_statusItem->setValue("Ligado");
-            if (it != m_items.end()) it->second->setValue("Ligado");
+            notify(m_target.name + " connected");
+            m_statusItem->setValue("Connected");
+            if (it != m_items.end()) it->second->setValue("Connected");
         } else {
-            notify("Não foi possível ligar a " + m_target.name);
-            m_statusItem->setValue("Falhou");
-            if (it != m_items.end()) it->second->setValue(isPaired(m_target.addr) ? "Emparelhado" : "");
+            notify("Could not connect to " + m_target.name);
+            m_statusItem->setValue("Failed");
+            if (it != m_items.end()) it->second->setValue(isPaired(m_target.addr) ? "Paired" : "");
         }
     }
 
@@ -550,7 +550,7 @@ private:
 };
 
 // =========================================================================
-// Menu principal
+// Main menu
 // =========================================================================
 class MainGui : public tsl::Gui {
 public:
@@ -560,13 +560,13 @@ public:
         auto* frame = new tsl::elm::OverlayFrame("Bluetooth", "Bluetooth Manager v" APP_VERSION);
         auto* list  = new tsl::elm::List();
 
-        list->addItem(new tsl::elm::CategoryHeader("Estado"));
-        m_radioItem = new tsl::elm::ListItem("Rádio Bluetooth", "…");
+        list->addItem(new tsl::elm::CategoryHeader("Status"));
+        m_radioItem = new tsl::elm::ListItem("Bluetooth radio", "…");
         list->addItem(m_radioItem);
 
-        list->addItem(new tsl::elm::CategoryHeader("Emparelhar"));
+        list->addItem(new tsl::elm::CategoryHeader("Pair"));
 
-        auto* pairPad = new tsl::elm::ListItem("Comando", "");
+        auto* pairPad = new tsl::elm::ListItem("Controller", "");
         pairPad->setClickListener([](u64 keys) {
             if (!(keys & KEY_A)) return false;
             tsl::changeTo<PairGamepadGui>();
@@ -574,7 +574,7 @@ public:
         });
         list->addItem(pairPad);
 
-        auto* pairAudio = new tsl::elm::ListItem("Auscultadores / colunas", "");
+        auto* pairAudio = new tsl::elm::ListItem("Headphones / speakers", "");
         pairAudio->setClickListener([](u64 keys) {
             if (!(keys & KEY_A)) return false;
             tsl::changeTo<PairAudioGui>();
@@ -582,8 +582,8 @@ public:
         });
         list->addItem(pairAudio);
 
-        list->addItem(new tsl::elm::CategoryHeader("Gerir"));
-        m_pairedItem = new tsl::elm::ListItem("Dispositivos emparelhados", "…");
+        list->addItem(new tsl::elm::CategoryHeader("Manage"));
+        m_pairedItem = new tsl::elm::ListItem("Paired devices", "…");
         m_pairedItem->setClickListener([](u64 keys) {
             if (!(keys & KEY_A)) return false;
             tsl::changeTo<DevicesGui>();
@@ -591,7 +591,7 @@ public:
         });
         list->addItem(m_pairedItem);
 
-        addDescription(list, "Ligar, desligar ou esquecer dispositivos.");
+        addDescription(list, "Connect, disconnect or forget devices.");
 
         frame->setContent(list);
         return frame;
@@ -602,14 +602,14 @@ public:
 
         bool on = false;
         if (R_SUCCEEDED(bt::isRadioOn(on)))
-            m_radioItem->setValue(on ? "Ligado" : "Desligado (modo de voo)");
+            m_radioItem->setValue(on ? "On" : "Off (airplane mode)");
 
         std::vector<bt::Device> devs;
         if (R_SUCCEEDED(bt::getPaired(devs))) {
             size_t connected = 0;
             for (auto& d : devs) if (d.connected) connected++;
             m_pairedItem->setValue(std::to_string(devs.size()) + " (" +
-                                   std::to_string(connected) + " ligados)");
+                                   std::to_string(connected) + " connected)");
         }
     }
 
