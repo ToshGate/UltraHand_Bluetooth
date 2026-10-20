@@ -12,11 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Dependências do libultrahand
-        run: |
-          dkp-pacman -Sy --noconfirm --needed switch-curl switch-zlib switch-mbedtls
-          dkp-pacman -S --noconfirm --needed switch-minizip || echo "switch-minizip indisponível (opcional)"
-
+      # A imagem oficial já traz switch-curl, switch-zlib e switch-mbedtls.
       - name: Compilar overlay
         run: make -j$(nproc)
 
