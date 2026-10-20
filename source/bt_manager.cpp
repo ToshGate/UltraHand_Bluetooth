@@ -138,6 +138,10 @@ namespace bt {
             if (R_SUCCEEDED(btmsysIsDiscoveryingAudioDevice(&active)) && active)
                 btmsysStopAudioDeviceDiscovery();
         }
+        // The system keeps its own Bluetooth setting (set:sys BluetoothEnableFlag) and
+        // turns the radio back on while that setting says "enabled". Update it first so
+        // the change sticks. Only the Bluetooth flag is touched: Wi-Fi / NFC are untouched.
+        setsysSetBluetoothEnableFlag(on);
         return on ? btmsysEnableRadio() : btmsysDisableRadio();
     }
 
