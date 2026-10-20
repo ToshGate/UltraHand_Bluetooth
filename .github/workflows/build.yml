@@ -20,4 +20,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ovl-bluetooth
-          path: out/
+          path: ovl-bluetooth.ovl
+          if-no-files-found: error
