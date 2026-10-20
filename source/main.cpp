@@ -224,6 +224,10 @@ public:
             return frame;
         }
 
+        // Key hint: A = connect / disconnect, Y = details
+        list->addItem(new tsl::elm::CategoryHeader(
+            "\uE0E0 Connect / disconnect " + ult::DIVIDER_SYMBOL + " \uE0E3 Details"));
+
         addSection(list, "Controllers", bt::DevType::Gamepad, "No controllers paired");
         addSection(list, "Audio",       bt::DevType::Audio,   "No audio devices paired");
 
@@ -277,6 +281,22 @@ public:
                 }
             }
         }
+
+        // Pending audio connection started with A: report the result
+        if (!m_pendingKey.empty()) {
+            const bt::Device* dev = findDevice(m_pendingKey);
+            if (!dev) {
+                m_pendingKey.clear();
+            } else if (dev->connected) {
+                notify(dev->name + " connected");
+                m_pendingKey.clear();
+            } else if (nowMs() - m_pendingAt > 20000) {
+                notify("Could not connect to " + dev->name);
+                if (auto it = m_items.find(m_pendingKey); it != m_items.end())
+                    it->second->setValue("");
+                m_pendingKey.clear();
+            }
+        }
     }
 
 private:
@@ -292,20 +312,75 @@ private:
         for (const auto& d : m_devs) {
             if (d.type != type) continue;
             auto* item = new tsl::elm::ListItem(d.name, d.connected ? "Connected" : "");
-            const bt::Device copy = d;
-            item->setClickListener([copy](u64 keys) {
-                if (!(keys & KEY_A)) return false;
-                tsl::changeTo<DeviceGui>(copy);
-                return true;
+            const std::string key = addrKey(d.addr);
+            item->setClickListener([this, item, key](u64 keys) {
+                if (keys & KEY_A) {
+                    toggleConnection(key);
+                    return true;
+                }
+                if (keys & KEY_Y) {
+                    const bt::Device* dev = findDevice(key);
+                    if (!dev) return true;
+                    item->triggerClickAnimation();
+                    triggerSettingsFeedback();
+                    tsl::changeTo<DeviceGui>(*dev);
+                    return true;
+                }
+                return false;
             });
-            m_items[addrKey(d.addr)] = item;
+            m_items[key] = item;
             list->addItem(item);
+        }
+    }
+
+    bt::Device* findDevice(const std::string& key) {
+        for (auto& d : m_devs) if (addrKey(d.addr) == key) return &d;
+        return nullptr;
+    }
+
+    /// A: connect (audio) or disconnect the device under the cursor
+    void toggleConnection(const std::string& key) {
+        bt::Device* dev = findDevice(key);
+        if (!dev) return;
+        auto it = m_items.find(key);
+        tsl::elm::ListItem* item = it != m_items.end() ? it->second : nullptr;
+
+        if (dev->connected) {
+            const Result rc = bt::disconnect(*dev);
+            notify(R_SUCCEEDED(rc) ? dev->name + " disconnected"
+                                   : "Failed to disconnect (" + bt::resultToString(rc) + ")");
+            return;
+        }
+
+        switch (dev->type) {
+            case bt::DevType::Audio: {
+                if (!m_pendingKey.empty()) { notify("A connection is already in progress"); return; }
+                const Result rc = bt::connectAudio(dev->addr);
+                if (R_FAILED(rc)) {
+                    notify("Failed to connect (" + bt::resultToString(rc) + ")");
+                    return;
+                }
+                m_pendingKey = key;
+                m_pendingAt  = nowMs();
+                if (item) item->setValue("Connecting…");
+                break;
+            }
+            case bt::DevType::Gamepad:
+                // The console cannot initiate a controller connection: the controller must
+                // connect to the console itself (any button press wakes it up).
+                notify("Press any button on the controller to connect it");
+                break;
+            default:
+                notify("Not supported for this device");
+                break;
         }
     }
 
     std::vector<bt::Device> m_devs;
     std::unordered_map<std::string, tsl::elm::ListItem*> m_items;
     tsl::elm::ListItem* m_clearItem = nullptr;
+    std::string m_pendingKey;      // audio device being connected with A
+    u64         m_pendingAt = 0;
     Result  m_rc = 0;
     Confirm m_confirm;
     Ticker  m_tick;
