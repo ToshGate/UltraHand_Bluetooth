@@ -39,6 +39,12 @@ namespace bt {
 
     // Status
     Result isRadioOn(bool& out);
+    /// Turns only the Bluetooth radio on/off (btm:sys EnableRadio / DisableRadio).
+    /// Does not change the system's airplane mode setting.
+    Result setRadio(bool on);
+    /// True if any connected controller uses the rails (handheld) or USB,
+    /// i.e. input would keep working with the Bluetooth radio off.
+    bool   hasNonBluetoothInput();
 
     // Paired devices (with connection status)
     Result getPaired(std::vector<Device>& out);
