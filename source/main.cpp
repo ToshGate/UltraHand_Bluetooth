@@ -18,7 +18,7 @@
 #include "bt_manager.hpp"
 
 #ifndef APP_VERSION
-#define APP_VERSION "1.1.0"
+#define APP_VERSION "1.0.0"
 #endif
 
 // =========================================================================
@@ -637,7 +637,13 @@ public:
 
         list->addItem(new tsl::elm::CategoryHeader("Status"));
         m_radioItem = new tsl::elm::ListItem("Bluetooth radio", "…");
+        m_radioItem->setClickListener([this](u64 keys) {
+            if (!(keys & KEY_A)) return false;
+            toggleRadio();
+            return true;
+        });
         list->addItem(m_radioItem);
+        addDescription(list, "\uE0E0 turns only Bluetooth on/off.\nAirplane mode and Wi-Fi are not changed.");
 
         list->addItem(new tsl::elm::CategoryHeader("Pair"));
 
@@ -673,11 +679,14 @@ public:
     }
 
     void update() override {
+        if (m_radioConfirm.expired()) { m_radioConfirm.reset(); m_tick.last = 0; }
         if (!bt::isReady() || !m_tick.due(1000)) return;
 
         bool on = false;
-        if (R_SUCCEEDED(bt::isRadioOn(on)))
-            m_radioItem->setValue(on ? "On" : "Off (airplane mode)");
+        if (!m_radioConfirm.armed && R_SUCCEEDED(bt::isRadioOn(on))) {
+            m_radioOn = on;
+            m_radioItem->setValue(on ? "On" : "Off");
+        }
 
         std::vector<bt::Device> devs;
         if (R_SUCCEEDED(bt::getPaired(devs))) {
@@ -689,9 +698,37 @@ public:
     }
 
 private:
+    void toggleRadio() {
+        bool on = false;
+        if (R_FAILED(bt::isRadioOn(on))) on = m_radioOn;
+
+        if (!on) {
+            const Result rc = bt::setRadio(true);
+            notify(R_SUCCEEDED(rc) ? "Bluetooth turned on"
+                                   : "Failed to turn on Bluetooth (" + bt::resultToString(rc) + ")");
+            m_tick.last = 0;   // refresh status on the next frame
+            return;
+        }
+
+        // Turning off: always ask for confirmation, with a stronger warning when
+        // every connected controller is wireless (input would be lost).
+        if (!m_radioConfirm.press()) {
+            m_radioItem->setValue(bt::hasNonBluetoothInput()
+                ? "Press \uE0E0 to turn off"
+                : "No wired input! \uE0E0 again to confirm");
+            return;
+        }
+        const Result rc = bt::setRadio(false);
+        notify(R_SUCCEEDED(rc) ? "Bluetooth turned off"
+                               : "Failed to turn off Bluetooth (" + bt::resultToString(rc) + ")");
+        m_tick.last = 0;
+    }
+
     tsl::elm::ListItem* m_radioItem  = nullptr;
     tsl::elm::ListItem* m_pairedItem = nullptr;
-    Ticker m_tick;
+    bool    m_radioOn = false;
+    Confirm m_radioConfirm;
+    Ticker  m_tick;
 };
 
 // =========================================================================
