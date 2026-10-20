@@ -1,0 +1,8 @@
+build/
+out/
+*.elf
+*.nacp
+*.nro
+*.ovl
+*.map
+*.zip

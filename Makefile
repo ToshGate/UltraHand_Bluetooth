@@ -94,7 +94,9 @@ ASFLAGS := $(ARCH)
 LDFLAGS += -specs=$(DEVKITPRO)/libnx/switch.specs $(ARCH) -Wl,-Map,$(notdir $*.map)
 
 # Essential libraries for Ultrahand Overlay
-LIBS := -lcurl -lz -lminizip -lmbedtls -lmbedx509 -lmbedcrypto -lnx
+# -lminizip só é ligado se a biblioteca existir (nem todas as instalações do devkitPro a têm)
+MINIZIP := $(if $(wildcard $(PORTLIBS)/lib/libminizip.a),-lminizip,)
+LIBS := -lcurl -lz $(MINIZIP) -lmbedtls -lmbedx509 -lmbedcrypto -lnx
 
 CXXFLAGS += -fno-exceptions -ffunction-sections -fdata-sections -fno-rtti
 LDFLAGS += -Wl,--as-needed -Wl,--gc-sections
