@@ -14,7 +14,9 @@ namespace bt {
         constexpr size_t MaxDevices = 20;
 
         std::string safeName(const char* raw, size_t maxLen, const BtdrvAddress& addr) {
-            std::string s(raw, strnlen(raw, maxLen));
+            const void* end = std::memchr(raw, '\0', maxLen);
+            const size_t len = end ? static_cast<const char*>(end) - raw : maxLen;
+            std::string s(raw, len);
             // Remove espaços no fim
             while (!s.empty() && (s.back() == ' ' || s.back() == '\0'))
                 s.pop_back();
@@ -114,14 +116,14 @@ namespace bt {
         out.clear();
         if (!g_btmReady) return g_initRc;
 
-        std::vector<BtmDeviceInfo> infos(MaxDevices);
+        std::vector<BtmDeviceInfoV13> infos(MaxDevices);
         s32 total = 0;
         Result rc = btmGetDeviceInfo(BtmProfile_None, infos.data(), infos.size(), &total);
         if (R_FAILED(rc)) return rc;
         total = std::clamp<s32>(total, 0, (s32)infos.size());
 
         // Estado de ligação (dispositivos atualmente ligados)
-        std::vector<BtmDeviceCondition> conds(MaxDevices);
+        std::vector<BtmConnectedDeviceV13> conds(MaxDevices);
         s32 connectedTotal = 0;
         if (R_FAILED(btmGetDeviceCondition(BtmProfile_None, conds.data(), conds.size(), &connectedTotal)))
             connectedTotal = 0;
@@ -129,14 +131,14 @@ namespace bt {
 
         out.reserve(total);
         for (s32 i = 0; i < total; i++) {
-            const BtmDeviceInfo& info = infos[i];
+            const BtmDeviceInfoV13& info = infos[i];
             Device d;
             d.addr = info.addr;
             d.type = profileToType(info.profile);
             d.name = safeName(info.name, sizeof(info.name), info.addr);
             if (d.type == DevType::Gamepad) {
-                d.vid = info.profile_info.hid.vid;
-                d.pid = info.profile_info.hid.pid;
+                d.vid = info.profile_info.hid_device_info.vid;
+                d.pid = info.profile_info.hid_device_info.pid;
             }
             for (s32 j = 0; j < connectedTotal; j++) {
                 if (sameAddr(conds[j].address, info.addr)) { d.connected = true; break; }
