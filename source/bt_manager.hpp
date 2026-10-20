@@ -39,8 +39,9 @@ namespace bt {
 
     // Status
     Result isRadioOn(bool& out);
-    /// Turns only the Bluetooth radio on/off (btm:sys EnableRadio / DisableRadio).
-    /// Does not change the system's airplane mode setting.
+    /// Turns only Bluetooth on/off: updates the system Bluetooth setting
+    /// (set:sys BluetoothEnableFlag) and the radio (btm:sys EnableRadio / DisableRadio).
+    /// Wi-Fi and NFC settings are not changed.
     Result setRadio(bool on);
     /// True if any connected controller uses the rails (handheld) or USB,
     /// i.e. input would keep working with the Bluetooth radio off.
