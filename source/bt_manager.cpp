@@ -11,7 +11,22 @@ namespace bt {
         bool   g_btmsysReady = false;
         Result g_initRc      = 0;
 
-        constexpr size_t MaxDevices = 20;
+        // Limites do próprio serviço (switchbrew): os pedidos usam "pointer buffers"
+        // de tamanho fixo e, se o buffer for maior do que o servidor aceita, o btm
+        // fecha a sessão (erro 2001-0123 / KernelError_ConnectionClosed).
+        constexpr size_t MaxDeviceInfo      = 10;  // GetDeviceInfo:      0x13C * 10
+        constexpr size_t MaxDeviceCondition = 8;   // GetDeviceCondition: 0x148 * 8
+        constexpr size_t MaxAudioDevices    = 8;   // BtmAudioDevice:     0xFF  * 8
+
+        const Result ConnectionClosed = MAKERESULT(Module_Kernel, KernelError_ConnectionClosed);
+
+        /// Se o serviço fechou a sessão, volta a abri-la para os pedidos seguintes.
+        Result recover(Result rc) {
+            if (rc != ConnectionClosed) return rc;
+            if (g_btmReady)    { btmExit();    g_btmReady    = R_SUCCEEDED(btmInitialize()); }
+            if (g_btmsysReady) { btmsysExit(); g_btmsysReady = R_SUCCEEDED(btmsysInitialize()); }
+            return rc;
+        }
 
         std::string safeName(const char* raw, size_t maxLen, const BtdrvAddress& addr) {
             const void* end = std::memchr(raw, '\0', maxLen);
@@ -116,17 +131,19 @@ namespace bt {
         out.clear();
         if (!g_btmReady) return g_initRc;
 
-        std::vector<BtmDeviceInfoV13> infos(MaxDevices);
+        std::vector<BtmDeviceInfoV13> infos(MaxDeviceInfo);
         s32 total = 0;
         Result rc = btmGetDeviceInfo(BtmProfile_None, infos.data(), infos.size(), &total);
-        if (R_FAILED(rc)) return rc;
+        if (R_FAILED(rc)) return recover(rc);
         total = std::clamp<s32>(total, 0, (s32)infos.size());
 
         // Estado de ligação (dispositivos atualmente ligados)
-        std::vector<BtmConnectedDeviceV13> conds(MaxDevices);
+        std::vector<BtmConnectedDeviceV13> conds(MaxDeviceCondition);
         s32 connectedTotal = 0;
-        if (R_FAILED(btmGetDeviceCondition(BtmProfile_None, conds.data(), conds.size(), &connectedTotal)))
+        if (Result crc = btmGetDeviceCondition(BtmProfile_None, conds.data(), conds.size(), &connectedTotal); R_FAILED(crc)) {
+            recover(crc);
             connectedTotal = 0;
+        }
         connectedTotal = std::clamp<s32>(connectedTotal, 0, (s32)conds.size());
 
         out.reserve(total);
@@ -148,9 +165,11 @@ namespace bt {
 
         // Áudio: a lista de "ligados" do btm:sys é a mais fiável para este perfil
         if (g_btmsysReady) {
-            std::vector<BtmAudioDevice> audio(8);
+            std::vector<BtmAudioDevice> audio(MaxAudioDevices);
             s32 audioTotal = 0;
-            if (R_SUCCEEDED(btmsysGetConnectedAudioDevices(audio.data(), audio.size(), &audioTotal))) {
+            Result arc = btmsysGetConnectedAudioDevices(audio.data(), audio.size(), &audioTotal);
+            if (R_FAILED(arc)) recover(arc);
+            else {
                 audioTotal = std::clamp<s32>(audioTotal, 0, (s32)audio.size());
                 for (auto& d : out) {
                     if (d.type != DevType::Audio) continue;
@@ -207,10 +226,10 @@ namespace bt {
         out.clear();
         if (!g_btmsysReady) return g_initRc;
 
-        std::vector<BtmAudioDevice> found(15);
+        std::vector<BtmAudioDevice> found(MaxAudioDevices);
         s32 total = 0;
         Result rc = btmsysGetDiscoveredAudioDevice(found.data(), found.size(), &total);
-        if (R_FAILED(rc)) return rc;
+        if (R_FAILED(rc)) return recover(rc);
         total = std::clamp<s32>(total, 0, (s32)found.size());
 
         for (s32 i = 0; i < total; i++) {
