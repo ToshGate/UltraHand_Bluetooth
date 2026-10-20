@@ -18,7 +18,7 @@
 #include "bt_manager.hpp"
 
 #ifndef APP_VERSION
-#define APP_VERSION "1.0.0"
+#define APP_VERSION "1.1.0"
 #endif
 
 // =========================================================================
